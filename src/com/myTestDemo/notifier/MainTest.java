@@ -152,12 +152,6 @@ public class MainTest {
             }
         });
 
-//        notifier2.subscribe("American", new EventObserver() {
-//            @Override
-//            public void onEvent(Object info) {
-//                System.out.println("NeNotify American info = " + info);
-//            }
-//        });
         new Thread(new Runnable() {
             @Override
             public void run() {
