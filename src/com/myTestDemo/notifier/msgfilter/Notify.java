@@ -2,97 +2,75 @@ package com.myTestDemo.notifier.msgfilter;
 
 import com.myTestDemo.notifier.entity.Message;
 import com.myTestDemo.notifier.eventObserver.EventObserver;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
- * 消息 订阅/分发 具体实现类
+ * 消息 订阅/分发
  *
  * @author LiuPeng
- * @version 2019/6/6 18:29
+ * @version 2019/6/3 18:29
  */
 
-public abstract class Notify implements CtrlNotifier {
+public class Notify implements CtrlNotifier {
 
-    private static FilterUtils filter = FilterUtils.getInstance();
+    private Logger log = LogManager.getLogger(Notify.class);
+    private static CtrlMsgFilterUtils filterUtils = CtrlMsgFilterUtils.getInstance();
 
-    @Override
-    public void subscribe(String key, EventObserver observer) {
+    private static class Inner {
+        private static final CtrlNotifier INSTANCE = new Notify();
+    }
 
-        filter.addFilter(addFilterAndEventObserverID());
-        filter.addCosumer(key, observer);
-
+    public static CtrlNotifier getNotifier() {
+        return Inner.INSTANCE;
     }
 
     @Override
-    public void subscribeAndFilter(String key, List<String> filterID, EventObserver observer) {
+    public void subscribe(String topic, String filterKey, EventObserver observer, Map<String, Predicate<Message>> filter) {
 
+        filterUtils.addFilterAndCosumer(topic,filterKey,observer,filter);
+        log.debug("Notify subscribe Ok!,  key:{}", filterKey);
     }
 
     @Override
-    public void unSubscribe(EventObserver observer) {
+    public void unSubscribe(String topic,EventObserver observer) {
 
-        filter.removeCosumer(observer);
+        filterUtils.removeCosumer(topic,observer);
     }
 
     @Override
     public void unSubscribe(String key) {
 
-        filter.removeCosumer(key);
+        filterUtils.removeCosumer(key);
     }
 
     @Override
     public void unRegisterAll() {
 
-        filter.unRegisterAll();
+        filterUtils.unRegisterAll();
     }
 
-
+    /**
+     * 分发所有
+     * @param topic 分组标签
+     * @param info 传递的信息
+     */
     @Override
-    public void post(Object info) {
+    public void post(String topic,Message info) {
+
         try {
 
-            Map<String, Predicate<Message>> filters = filter.getFilters();
-            if (null == filters) {
-                return;
-            }
-
-            for (Map.Entry entry : filters.entrySet()) {
-
-                Predicate<Message> a = (Predicate<Message>) entry.getValue();
-
-                Message msg = (Message) info;
-
-                if (a.test(msg)) {
-//                    System.out.println("检验通过，准备通知给" + entry.getKey().toString());
-
-                    getMobservers(entry.getKey().toString(), info);
-                } else {
-//                    System.out.println("检查不通过，抛弃" + msg.getType());
-                }
-            }
+            CtrlMsgFilterUtils.filterAndSend(topic,info);
 
         } catch (Exception e) {
-            e.printStackTrace();
-        }
 
-
-    }
-
-
-    private void getMobservers(String key, Object info) {
-
-        HashSet<EventObserver> observers = filter.getMobservers(key);
-        if (observers != null) {
-            System.out.println("Observers.size：" + observers.size());
-            for (EventObserver observer : observers) {
-                observer.onEvent(info);
-            }
+            log.error("Notify post Exception：{}", e.getMessage());
         }
     }
 
@@ -105,11 +83,6 @@ public abstract class Notify implements CtrlNotifier {
     @Override
     public void postAll(Object info) {
 
-        for (Map.Entry<String, HashSet<EventObserver>> entry : filter.getMobservers().entrySet()) {
-            for (EventObserver observer : entry.getValue()) {
-                observer.onEvent(info);
-            }
-        }
     }
 
     /**
@@ -125,23 +98,5 @@ public abstract class Notify implements CtrlNotifier {
                 .filter(ele -> mappers.stream()
                         .reduce(t -> true, Predicate::and)
                         .test(ele)).collect(Collectors.toList());
-    }
-
-    /**
-     * （新增）消费者id与过滤条件id绑定
-     */
-    protected abstract Map addFilterAndEventObserverID();
-
-    private void checkKey(String key) {
-        if (key == null) {
-            throw new IllegalArgumentException("key should not be null!");
-        }
-    }
-
-
-    private void check(String key) {
-        if (key == null) {
-            throw new IllegalArgumentException("key should not be null!");
-        }
     }
 }
